@@ -1,0 +1,1622 @@
+
+;;;;    GNU Emacs initialization file
+
+;;;     Robert E. Brown
+;;;     (robert.brown@gmail.com)
+
+
+;;;     Emacs launch configuration.
+
+
+;; Inhibit startup GNU propaganda, loading the site-specific default.el file,
+;; buffer menu when more than one file is initially loaded, and the scratch
+;; buffer help message.
+
+(setq inhibit-startup-echo-area-message "brown") ; must be a separate form
+(setq inhibit-default-init t
+      inhibit-startup-buffer-menu t
+      inhibit-startup-screen t
+      initial-scratch-message nil)
+
+
+;;;     Global settings
+
+
+;; This file uses some Common Lisp functions.
+(require 'cl-lib)
+
+(defun host-location ()
+  "Return HOME or WORK, an indication of where Emacs is running."
+  (if (member (system-name) '("chuwi" "raspberry-pi" "ugg"))
+      'home
+    'work))
+
+(defun local (path)
+  "Convert a PATH relative to ~/local into an absolute path."
+  (expand-file-name (concat "~/local/" path)))
+
+;; Turn off menus and highlighting of the marked region.
+(menu-bar-mode 0)
+(transient-mark-mode 0)
+
+;;  Disable novice "features".
+(put 'downcase-region 'disabled nil)
+(put 'narrow-to-page 'disabled nil)
+(put 'narrow-to-region 'disabled nil)
+
+;; Show matching parentheses.
+(show-paren-mode 1)
+
+;;  Initialize miscellaneous globals.
+
+(defun meg (megabytes)
+  "Convert a number of MEGABYTES into bytes."
+  (* 1024 1024 megabytes))
+
+(setq auto-mode-case-fold nil           ; case sensitive auto-mode-alist
+      blink-matching-paren-distance nil ; search whole file for match
+      browse-url-browser-function 'browse-url-generic
+      browse-url-generic-program "google-chrome"
+      comment-start "# "                ; default syntax for comment start
+      comment-start-skip "#+ *"         ; skip over start of comment
+      compilation-window-height 30      ; make compilation buffer 30 lines high
+      compile-command "make -w"         ; not "make -k"
+      electric-indent-mode nil          ; turn off auto indentation
+      emacs-lisp-docstring-fill-column 79
+      ;; XXXX: This setting causes display problems, such as garbage during a
+      ;; long running tags-search.
+      ;; garbage-collection-messages t  ; display messages when collecting
+      gc-cons-threshold (meg 5)         ; do not garbage collect too often
+      isearch-lax-whitespace nil        ; space does not match any whitespace
+      large-file-warning-threshold (meg 100)
+      line-move-visual nil              ; move by buffer lines, not visual ones
+      ;Man-frame-parameters 'pushy       ; use current buffer and current window
+      Man-notify-method 'pushy
+      max-lisp-eval-depth 10000
+      max-specpdl-size 10000            ; allow more stack variable bindings
+      mode-line-in-non-selected-windows nil ; make all mode lines look identical
+      mode-line-percent-position '(6 "%q")  ; show window start/end percentages
+      next-line-add-newlines nil        ; next-line at end of buffer is error
+      nobreak-char-display nil          ; no magenta non-breaking spaces
+      require-final-newline 'ask        ; ask on saving if no final newline
+      scroll-conservatively 10          ; smooth scroll most of the time
+      set-mark-command-repeat-pop t     ; C-u C-SPC ... rotates through marks
+      truncate-partial-width-windows nil; no truncation when vertically split
+      vc-handled-backends '()           ; disable VC mode
+      visible-cursor nil                ; use normal cursor, not blinking one
+      xterm-extra-capabilities nil)     ; do not query xterm for features
+
+(set-default 'case-fold-search nil)
+(set-default 'fill-column 79)           ; maximal fill but avoid column 80
+(set-default 'indent-tabs-mode nil)     ; reindent does not insert tabs
+
+(when (eq (host-location) 'work)
+  ;; Configure Internet proxies.  At Two Sigma a local proxy can be started
+  ;; with "gssproxy2 --exec emacs".
+  (setq url-proxy-services
+        '(("ftp" . "localhost:20000")
+          ("http" . "localhost:20000")
+          ("https" . "localhost:20000")
+          ("no_proxy" . "^.*twosigma\.com"))))
+
+
+;; Add the location of personal Emacs Lisp code to load path.
+
+(push (expand-file-name "~/lib/emacs/lisp") load-path)
+
+;; Set globals whose values are maintained separately in each buffer.
+
+(when (eq (host-location) 'home)
+  (add-hook 'find-file-hooks
+            (lambda ()
+              (setq buffer-read-only nil)))) ; allow editing every buffer
+
+;; Select font lock mode colors that can be displayed by 8-color tty terminals.
+
+(defconst +blue-face+                   ; #0000CD
+  '((((type tty) (class color)) (:foreground "blue"))
+    (((type tty) (class mono)) (:weight bold))
+    (((class color)) (:foreground "blue"))))
+
+(defconst +blue-bold-face+
+  '((((type tty) (class color)) (:foreground "blue" :weight bold))
+    (((type tty) (class mono)) (:weight bold :underline t))
+    (((class color)) (:foreground "blue" :weight bold))))
+
+(defconst +cyan-face+                   ; #00A4A4
+  '((((type tty) (class color)) (:foreground "cyan"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "cyan"))))
+
+(defconst +green-face+                  ; #008000
+  '((((type tty) (class color)) (:foreground "green"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "green3"))))
+
+(defconst +green-bold-face+
+  '((((type tty) (class color)) (:foreground "green" :weight bold))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "green3" :weight bold))))
+
+(defconst +magenta-face+                ; #A400A4
+  '((((type tty) (class color)) (:foreground "magenta" :weight normal))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "magenta3"))))
+
+(defconst +red-face+                    ; #9F0000
+  '((((type tty) (class color) (background light)) (:foreground "red"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "red3"))))
+
+(defconst +background-red-face+
+  '((((type tty) (class color) (background light)) (:background "red"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:background "red"))))
+
+;; Yellow doesn't show up well, so I only use it for ignorable information,
+;; such as status messages that are infrequently read.
+(defconst +yellow-face+                 ; #CDCD00
+  '((((type tty) (class color) (background light)) (:foreground "yellow"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:foreground "yellow"))))
+
+(defconst +background-yellow-face+
+  '((((type tty) (class color) (background light)) (:background "yellow"))
+    (((type tty) (class mono)) (:weight normal))
+    (((class color)) (:background "yellow"))))
+
+(defun set-faces (face-alist)
+  "Process FACE-ALIST."
+  (mapc (lambda (entry)
+          (face-spec-set (car entry) (cdr entry)))
+        face-alist))
+
+(set-faces `((warning . ,+magenta-face+)
+             (font-lock-builtin-face . ,+magenta-face+)
+             (font-lock-comment-face . ,+red-face+)
+             (font-lock-constant-face . ,+magenta-face+)
+             ;; documentation strings in red to match comments
+             (font-lock-doc-face . ,+red-face+)
+             ;; bold function names
+             (font-lock-function-name-face . ,+blue-bold-face+)
+             (font-lock-keyword-face . ,+magenta-face+)
+             (font-lock-string-face . ,+green-face+)
+             (font-lock-type-face . ,+green-face+)
+             (font-lock-variable-name-face . ,+blue-face+)
+             (sh-heredoc . ,+green-face+)
+             (show-paren-match . ,+background-yellow-face+)
+             (show-paren-mismatch . ,+background-red-face+)))
+
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(header-line ((t (:inherit nil :inverse-video nil :underline t)))))
+
+;; Dired settings
+
+(setq dired-listing-switches "-alG")    ; omit group information
+
+(when (display-color-p)
+  (add-hook 'dired-mode-hook
+            (lambda ()
+              (set-faces `((dired-directory . ,+blue-face+) ; was bold
+                           (dired-ignored . ,+yellow-face+))))))
+
+;; Set default tags file name.
+
+(let ((tags (getenv "TAGS")))
+  (when tags
+    (setq tags-file-name tags)))
+
+;; When guessing a coding system, start with UTF-8.  Use UTF-8 for new
+;; buffers, subprocess I/O, file names, terminal I/O and keyboard input.
+
+(prefer-coding-system 'utf-8)
+(set-default-coding-systems 'utf-8)
+
+
+;;;     Load some files automatically when certain functions are called.
+
+
+;; (autoload 'ace-mode "ace" "Mode for LACE files" t)
+;; (autoload 'dos "dos" nil t)
+;; (autoload 'eiffel-mode "eiffel3" "Mode for Eiffel programs" t)
+;; (autoload 'electric-command-history "echistory" "Electric history mode" t)
+;; (autoload 'filter-mode "filter" nil t)
+;; (autoload 'follow-mode "follow" "Synchronize windows" t)
+;; (autoload 'fx-mode "fx" nil t)
+;; (autoload 'mac "mac" nil t)
+;; (autoload 'psd-mode "psd" "Minor Scheme Debugger mode" t)
+;; (autoload 'slang-mode "slang-mode" "Mode for Slang code" t)
+;; (autoload 'sml-mode "sml-mode" "Mode for ML files" t)
+
+
+;;;     Auto save and backup file configuration.
+
+
+(setq backup-by-copying-when-linked t        ; handle links correctly
+      backup-enable-predicate (lambda (n) t) ; always create auto-save files
+      delete-auto-save-files t               ; leave no "#" files in home directory
+      delete-old-versions t                  ; delete excess backups silently
+      kept-new-versions 10                   ; keep 10 backups plus 2 oldest backups
+      vc-make-backup-files t                 ; make backups even with VC mode
+      version-control t)                     ; make backup versions unconditionally
+
+;;  Make all auto-save files go into my garbage directory.  When root or others
+;;  load my .emacs file, $_GARBAGE will not be set, so auto-save files will be
+;;  put in /tmp.
+
+(defvar auto-save-file-prefix
+  (cond ((equal system-type 'windows-nt)
+         (expand-file-name (concat (getenv "TMPDIR") "/")))
+        ;; Root may not be able to write to the current user's backup
+        ;; directory, since it may be NFS mounted from another host.
+        ((equal (user-real-login-name) "root") "/tmp/")
+        ((getenv "_GARBAGE") (concat (getenv "_GARBAGE") "/"))
+        (t "/tmp/"))
+  "*Prefix to prepend to all auto-save filenames.")
+
+(defun make-auto-save-file-name ()
+  "Return file name to use when auto saving the current buffer."
+  (let ((file-name (if buffer-file-name
+                       (file-name-nondirectory buffer-file-name)
+                     (concat "%" (buffer-name)))))
+    (concat auto-save-file-prefix "#" file-name "#")))
+
+(defun auto-save-file-name-p (filename)
+  "Return t if FILENAME can be yielded by `make-auto-save-file-name'.
+FILENAME should lack slashes."
+  (string-match (concat "^" auto-save-file-prefix "#.*#$") filename))
+
+
+;;;     Define key bindings in the Escape keymap.
+
+
+(define-key esc-map "\C-j" 'lisp-eval-last-sexp)
+(define-key esc-map "\C-l" 'line-to-top-of-window)
+(define-key esc-map "\C-m" 'lisp-eval-defun)
+(define-key esc-map " " 'set-mark-command)
+;(define-key esc-map "[" 'beginning-of-buffer)
+;(define-key esc-map "]" 'end-of-buffer)
+(define-key esc-map "r" 'query-replace)
+(define-key esc-map "s" 'center-line)
+(define-key esc-map "?" 'describe-key)
+
+(defun line-to-top-of-window ()
+  "Move current line to the top of the current window."
+  (interactive)
+  (recenter 0))
+
+
+;;;     Define key bindings in the Control-X keymap.
+
+
+(define-key ctl-x-map "\C-e" 'recursive-edit)
+(define-key ctl-x-map "2" 'my-split-window-vertically)
+(define-key ctl-x-map "3" 'my-split-window-horizontally)
+(define-key ctl-x-map "n" 'rename-buffer)
+(define-key ctl-x-map "p" 'my-previous-window)
+(define-key ctl-x-map "r" 'rmail)
+(define-key ctl-x-map "t" 'transpose-regions)
+
+(defun my-previous-window (count)
+  "Move to previous window COUNT on the screen."
+  (interactive "p")
+  (other-window (- count)))
+
+(defun my-split-window-vertically (size)
+  "My version of `split-window-vertically'.
+
+SIZE indicates how the window is split."
+  (interactive "P")
+  (split-window nil (and size (prefix-numeric-value size)))
+  (other-window 1))
+
+(defun my-split-window-horizontally (size)
+  "My version of `split-window-horizontally'.
+
+SIZE indicates how the window is split."
+  (interactive "P")
+  (split-window nil (and size (prefix-numeric-value size)) t)
+  (other-window 1))
+
+
+;;;     Create the Control-C keymap and define key bindings in it.
+
+
+(defvar ctl-c-map (make-sparse-keymap)
+  "Keymap for subcommands of \\<global-map>\\[Control-C-prefix].")
+
+(fset 'Control-C-prefix ctl-c-map)
+
+(define-key global-map "\C-c" 'Control-C-prefix)
+
+(define-key ctl-c-map "\C-c" 'save-buffers-kill-emacs)
+(define-key ctl-c-map "\C-h" 'swap-delete-and-backspace)
+(define-key ctl-c-map "\C-t" 'transpose-sentences)
+(define-key ctl-c-map "\t" 'toggle-tab-width)
+(define-key ctl-c-map " " 'fixup-whitespace)
+;; (define-key ctl-c-map "." 'find-tag)
+(define-key ctl-c-map "," 'tags-loop-continue)
+(define-key ctl-c-map ";" 'comment-region)
+(define-key ctl-c-map "b" 'window-bottom)
+(define-key ctl-c-map "f" 'print-buffer-file-name)
+(define-key ctl-c-map "g" 'goto-line)
+(define-key ctl-c-map "h" 'window-top)
+(define-key ctl-c-map "m" 'compile)
+(define-key ctl-c-map "o" 'occur)
+(define-key ctl-c-map "r" 'restore-screen-config)
+(define-key ctl-c-map "s" 'save-screen-config)
+(define-key ctl-c-map "t" 'transpose-paragraphs)
+(define-key ctl-c-map "v" 'set-variable)
+
+(defun swap-delete-and-backspace ()
+  "Swap the delete and backspace keys."
+  (interactive)
+  (keyboard-translate ?\C-? ?\C-h)
+  (keyboard-translate ?\C-h ?\C-?))
+
+(defun toggle-tab-width ()
+  "Toggle the value of `tab-width' back and forth between 4 and 8 spaces."
+  (interactive)
+  (setq tab-width (if (= tab-width 8) 4 8))
+  (message "tab-width set to %d" tab-width))
+
+(defun window-top ()
+  "Move to the top line of the current window."
+  (interactive)
+  (move-to-window-line 0))
+
+(defun window-bottom ()
+  "Move to the bottom line of the current window."
+  (interactive)
+  (move-to-window-line (- (window-height) 2)))
+
+(defun print-buffer-file-name ()
+  "Print the file name of the current buffer."
+  (interactive)
+  (if (stringp buffer-file-name)
+      (message (buffer-file-name))
+    (message "Buffer has no file name.")))
+
+(defvar *screen-saved* nil)
+(defvar *screen-config* nil)
+
+(defun save-screen-config ()
+  "Save the current screen configuration."
+  (interactive)
+  (setq *screen-config* (current-window-configuration))
+  (message "Screen configuration saved.")
+  (setq *screen-saved* t))
+
+(defun restore-screen-config ()
+  "Restore the screen configuration last saved."
+  (interactive)
+  (message "Screen configuration restored.")
+  (if (eq *screen-saved* 't)
+      (set-window-configuration *screen-config*)
+    (message "No saved screen configuration to restore.")))
+
+(defun toggle-show-trailing-whitespace ()
+  "Toggle the display of trailing whitespace."
+  (interactive)
+  (setq show-trailing-whitespace (not show-trailing-whitespace))
+  (message "%s trailing whitespace"
+           (if show-trailing-whitespace "Show" "Hide")))
+
+
+;;;     Create the Control-Z keymap and define key bindings in it.
+
+
+(defvar ctl-z-map (make-sparse-keymap)
+  "Keymap for subcommands of \\<global-map>\\[Control-Z-prefix].")
+
+(fset 'Control-Z-prefix ctl-z-map)
+
+(define-key global-map "\C-z" 'Control-Z-prefix)
+
+;; Lisp key bindings.
+
+(define-key ctl-z-map "\C-d" 'kill-sexp)
+(define-key ctl-z-map "\C-e" 'eval-last-sexp)
+(define-key ctl-z-map "\C-h" 'mark-defun)
+(define-key ctl-z-map " " 'mark-sexp)
+(define-key ctl-z-map "a" 'beginning-of-defun)
+(define-key ctl-z-map "b" 'backward-sexp)
+(define-key ctl-z-map "d" 'down-list)
+(define-key ctl-z-map "e" 'end-of-defun)
+(define-key ctl-z-map "f" 'forward-sexp)
+(define-key ctl-z-map "h" 'mark-defun)
+(define-key ctl-z-map "k" 'kill-sexp)
+(define-key ctl-z-map "q" 'indent-sexp)
+(define-key ctl-z-map "n" 'forward-list)
+(define-key ctl-z-map "p" 'backward-list)
+(define-key ctl-z-map "t" 'transpose-sexps)
+(define-key ctl-z-map "u" 'backward-up-list)
+(define-key ctl-z-map "@" 'mark-sexp)
+(define-key ctl-z-map "(" 'backward-up-list)
+(define-key ctl-z-map ")" 'up-list)
+(define-key ctl-z-map (kbd "DEL") 'backward-kill-sexp)
+
+;; Non-lisp key bindings.
+
+(define-key ctl-z-map "\C-s" 'tags-search)
+(define-key ctl-z-map "\C-z" 'suspend-emacs)
+(define-key ctl-z-map "\e" 'electric-command-history)
+(define-key ctl-z-map "\\" 'indent-region)
+(define-key ctl-z-map "r" 'query-replace-regexp)
+(define-key ctl-z-map "s" 're-search-forward)
+(define-key ctl-z-map "v" 'scroll-other-window)
+(define-key ctl-z-map "w" 'append-next-kill)
+(define-key ctl-z-map "!" 'shell)
+(define-key ctl-z-map "<" 'shift-left)
+(define-key ctl-z-map ">" 'shift-right)
+
+(defun shift-left (count)
+  "Shift the current region left COUNT columns."
+  (interactive "P")
+  (indent-rigidly (region-beginning)
+                  (region-end)
+                  (- (if count (prefix-numeric-value count) 2))))
+
+(defun shift-right (count)
+  "Shift the current region right COUNT columns."
+  (interactive "P")
+  (indent-rigidly (region-beginning)
+                  (region-end)
+                  (if count (prefix-numeric-value count) 2)))
+
+
+;;;     Electric buffer menu
+
+
+(define-key ctl-x-map "\C-b" 'electric-buffer-list)
+
+;; Increase the space devoted to buffer name; decrease space for mode name.
+(setq Buffer-menu-name-width 32
+      Buffer-menu-mode-width 8)
+
+(add-hook 'electric-buffer-menu-mode-hook
+          (lambda ()
+            (let ((map electric-buffer-menu-mode-map))
+              (define-key map "\C-r" 'isearch-backward)
+              (define-key map "\C-s" 'isearch-forward)
+              (define-key map "f" 'Electric-buffer-menu-select))))
+
+
+;;;     GNUS newsgroup and email reader
+
+
+(setq canlock-password "ade6263f3ca261b15dc04d2108e9b2c0f52a8f24" ; XXXX: What is this?
+      gnus-article-save-directory (expand-file-name "~/News")
+      gnus-asynchronous t               ; fetch articles in the background
+      gnus-check-new-news t
+      gnus-emphasis-alist '()           ; turn off smiley processing
+      gnus-large-newsgroup 500
+      gnus-local-domain "bibliotech.com"
+      gnus-local-organization "Bibliotech"
+      gnus-local-timezone "EST"
+      gnus-novice-user t
+      gnus-read-active-file nil
+      gnus-save-all-headers t
+      gnus-select-method '(nntp "freenews.netfront.net")
+      gnus-treat-display-smileys nil)
+
+(setq gnus-select-method
+      (if (eq (host-location) 'home)
+          '(nntp "freenews.netfront.net")
+        '(nntp
+          "forums.twosigma.com"
+          (nntp-open-connection-function nntp-open-ssl-stream)
+          (nntp-port-number 60608))))
+
+;; ;; Configure GNUS for reading email from an IMAP server.
+;; (setq gnus-select-method '(nntp "news"))
+;; (setq gnus-secondary-select-methods
+;;       '((nnimap "google"
+;;                 (nnimap-address "brown.pobox.corp.google.com")
+;;                 (nnimap-authenticator login)
+;;                 (nnimap-expunge-on-close never)
+;;                 (nnimap-stream ssl))))
+
+;; '((nnimap "Two Sigma"
+;;           (nnimap-address "imap.twosigma.com")
+;;           (nnimap-authenticator nil)
+;;           (nnimap-stream shell)))))
+;; (setq nnimap-shell-program "imtest -s %s")
+
+;; How to invoke the program used to implement SSL streams.
+(setq imap-ssl-program "/usr/bin/openssl s_client -ssl3 -connect %s:%p")
+
+
+;;;     Use monkey-mode instead of dired to examine directories.
+
+
+(push (local "software/package/monkey-mode") load-path)
+
+(autoload 'minkey "monkey" nil t)
+(autoload 'monkey-alternate-file "monkey" nil t)
+(autoload 'monkey-background "monkey" nil t)
+(autoload 'monkey-file "monkey" nil t)
+(autoload 'monkey-file-other-window "monkey" nil t)
+
+(defun start-monkey ()
+  "Start monkeying around."
+  (interactive)
+  (global-set-key "\C-x\C-v" 'monkey-alternate-file)
+  (global-set-key "\M-&" 'monkey-background)
+  (global-set-key "\C-x\C-f" 'monkey-file)
+  (global-set-key "\C-x4\C-f" 'monkey-file-other-window))
+
+
+;;;     ERC Internet Relay Chat client
+
+
+(setq erc-anonymous-login nil
+      erc-auto-query 'window-noselect
+      erc-echo-timestamps t
+      erc-fill-column 98
+      erc-server-reconnect-attempts t)  ; always reconnect
+
+;; TODO: Remove this hook when Emacs 25 is released.
+;; XXXX: Verify this works correctly now.
+;; (add-hook 'erc-disconnected-hook
+;;           (lambda (nick host-name reason)
+;;             ;; Re-establish the connection even if the server closed it.
+;;             (setq erc-server-error-occurred nil)))
+
+(add-hook 'erc-mode-hook
+          (lambda ()
+            (erc-add-scroll-to-bottom)
+            ;; Turn common Google URL patterns into buttons.
+            (dolist (url-regexp
+                     '("\\bb/[[:digit:]]+\\b"     ; bugs
+                       "\\bc[lr]/[[:digit:]]+\\b" ; change lists
+                       "\\bt/[[:digit:]]+\\b"     ; tickets
+                       "\\bgo/\\([a-zA-Z-_]\\)")) ; shortened links
+              (push `(,url-regexp 0 t browse-url 0) erc-button-alist))
+            (when (display-color-p)
+              (set-faces `((erc-current-nick-face . ,+magenta-face+)
+                           (erc-keyword-face . ,+blue-face+)
+                           (erc-notice-face . ,+yellow-face+)
+                           (erc-pal-face . ,+magenta-face+)
+                           (erc-prompt-face . ,+green-bold-face+)
+                           (erc-timestamp-face . ,+green-face+))))))
+
+(defun add-autojoin (server channel)
+  (require 'erc-join)
+  (when (and erc-autojoin-domain-only
+             (string-match "[^.\n]+\\.\\([^.\n]+\\.[^.\n]+\\)$" server))
+    (setq server (match-string 1 server)))
+  (let ((elem (assoc server erc-autojoin-channels-alist)))
+    (if elem
+        (unless (member channel (cdr elem))
+          (setcdr elem (cons channel (cdr elem))))
+      (setq erc-autojoin-channels-alist
+            (cons (list server channel) erc-autojoin-channels-alist)))))
+
+(cl-defmacro define-chat (function server channel
+                                  &key (nick "brown") password tls (port (if tls 6697 6667)))
+  "Define an IRC chat command."
+  `(defun ,function ()
+     (interactive)
+     (add-autojoin ,server ,channel)
+     (funcall (if ,tls 'erc-tls 'erc)
+              :server ,server :port ,port :nick ,nick :password ,password
+              :full-name "Robert Brown")))
+
+(cl-defmacro define-freenode-chat (function channel)
+  `(define-chat ,function "chat.freenode.net" ,channel
+     :nick "reb" :password "reb:uw#kDudn*wdjfh" :tls t))
+
+(define-chat debian-arm-chat "irc.debian.org" "#debian-arm")
+(define-chat slim-chat "irc.perl.org" "#slimserver")
+
+(define-freenode-chat abcl-chat "#abcl")
+(define-freenode-chat bazel-chat "#bazel")
+(define-freenode-chat clasp-chat "#clasp")
+(define-freenode-chat clim-chat "#clim")
+(define-freenode-chat freenode-staff-chat "#freenode")
+(define-freenode-chat gallium-chat "#galliumos")
+(define-freenode-chat go-chat "#go-nuts")
+(define-freenode-chat grpc-chat "#grpc")
+(define-freenode-chat lisp-chat "#lisp")
+(define-freenode-chat nyc-mesh-chat "#nycmeshnet")
+(define-freenode-chat python-chat "#python")
+(define-freenode-chat sbcl-chat "#sbcl")
+(define-freenode-chat symbolics-chat "#smbx")
+(define-freenode-chat ubuntu-arm-chat "#ubuntu-arm")
+(define-freenode-chat ubuntu-chat "#ubuntu")
+(define-freenode-chat wireless-chat "#linux-wireless")
+
+
+;;;     Jabber client
+
+
+;; (push (local "software/source/emacs-jabber") load-path)
+;; ;; (load "jabber-autoloads")
+;; (autoload 'jabber-connect "jabber" "Start Emacs Jabber client." t)
+
+;; (setq jabber-account-list
+;;       '(("robert.brown@gmail.com"
+;;          (:network-server . "talk.google.com") (:connection-type . ssl))
+;;         ("brown@google.com"
+;;          (:network-server . "talk.google.com") (:connection-type . ssl))))
+
+;; (setq jabber-muc-autojoin '("sierra-prod@conference.google.com"))
+
+;; (defun buzz ()
+;;   "Connect to Google's internal IM network."
+;;   (interactive)
+;;   (setq jabber-connection-type 'ssl
+;;         jabber-muc-autojoin '("sierra-eng@conference.google.com")
+;;         jabber-network-server "talk.google.com"
+;;         jabber-server "google.com"
+;;         jabber-username (user-login-name))
+;;   (jabber-connect))
+
+
+;;;     Common Lisp editing
+
+
+;; File name completion should ignore ABCL, Clozure CL, and XCL fasl files.
+
+(dolist (suffix '(".abcl" ".lx64fsl" ".xcl"))
+  (push suffix completion-ignored-extensions))
+
+;; Lisp mode selection and defaults.
+
+(push '("\\.cl\\'" . lisp-mode) auto-mode-alist)
+(push '("\\.system\\'" . lisp-mode) auto-mode-alist)
+
+(add-hook 'lisp-interaction-mode-hook
+          (lambda ()
+            (define-key lisp-interaction-mode-map (kbd "DEL") 'delete-backward-char)
+            (setq show-trailing-whitespace t)))
+
+(add-hook 'lisp-mode-hook
+          (lambda ()
+            (define-key lisp-mode-map (kbd "DEL") 'delete-backward-char)
+            ;; Indicate that lisp-mode is derived from emacs-lisp-mode so
+            ;; that fill-paragraph uses emacs-lisp-docstring-fill-column.
+            (put 'lisp-mode 'derived-mode-parent 'emacs-lisp-mode)
+            (setq comment-start "; "
+                  ;; Lisp documentation strings fit within 80 columns.
+                  emacs-lisp-docstring-fill-column 79
+                  ;; Lisp comments are the same width as the code.
+                  fill-column 99
+                  show-trailing-whitespace t)
+
+            (make-local-variable lisp-indent-function)
+            (setq lisp-indent-function 'common-lisp-indent-function)
+            ;; No special handling for loop lines that start with a keyword.
+            ;; (setq lisp-loop-forms-indentation 6
+            ;;       lisp-loop-keyword-indentation 6)
+            ;; Indent simple loop forms as let.
+            (setq lisp-simple-loop-indentation 2)
+            (require 'slime-indentation)
+
+            ;; Emacs version 27 formats uninterned symbols badly.
+            (let ((regex (car (nth 6 lisp-cl-font-lock-keywords-2))))
+              (setf (nth 6 lisp-cl-font-lock-keywords-2)
+                    `(,regex . font-lock-builtin-face)))
+            ))
+
+;; Fontify iterate and loop clauses and keywords.
+(let* ((iterate-clauses '())
+;;         '("accumulate" "accumulating" "adjoining" "after-each" "always"
+;;           "appending" "as" "back" "collect" "collecting" "counting" "else"
+;;           "finally" "finally-protected" "finding" "finish" "first-iteration-p"
+;;           "first-time-p" "for" "generate" "generating" "if-first-time" "in"
+;;           "initially" "iter" "leave" "maximize" "maximizing" "minimize"
+;;           "minimizing" "multiply" "multiplying" "nconcing" "never" "next"
+;;           "next-iteration" "nunioning" "reducing" "repeat" "sum" "summing"
+;;           "terminate" "thereis" "unioning" "until" "while" "with"))
+       (iterate-keywords '())
+;;         '("above" "at" "beginning" "below" "by" "do-next" "downfrom" "downto"
+;;           "end" "external-only" "first" "from" "having-access" "in" "in-file"
+;;           "in-hashtable" "in-package" "in-packages" "in-sequence" "in-stream"
+;;           "in-string" "in-vector" "index-of-sequence" "index-of-string"
+;;           "index-of-vector" "initial-value" "initially" "into" "on"
+;;           "on-failure" "previous" "result-type" "start" "such-that" "test"
+;;           "then" "to" "upfrom" "using" "with-index"))
+       (loop-clauses '()) ;; '("hash-value" "hash-key" "loop"))
+       (loop-keywords '())
+;;         '("above" "across" "always" "and" "append" "appending" "as" "being"
+;;           "below" "by" "collect" "collecting" "count" "counting" "do" "doing"
+;;           "downfrom" "downto" "each" "else" "end" "external-symbol"
+;;           "external-symbols" "finally" "for" "from" "hash-key" "hash-keys"
+;;           "hash-value" "hash-values" "if" "in" "initially" "into" "it"
+;;           "maximize" "maximizing" "minimize" "minimizing" "named" "nconc"
+;;           "nconcing" "never" "of" "of-type" "on" "present-symbol"
+;;           "present-symbols" "repeat" "return" "sum" "summing" "symbol"
+;;           "symbols" "the" "then" "thereis" "to" "unless" "until" "upfrom"
+;;           "upto" "using" "when" "while" "with"))
+       (keywords (cl-union iterate-keywords loop-keywords))
+       (clauses (cl-set-difference (cl-union iterate-clauses loop-clauses)
+                                   keywords))
+       (clause-regexp (concat "(" (regexp-opt clauses t) "\\>"))
+       (keyword-regexp (regexp-opt keywords 'words)))
+  (font-lock-add-keywords 'lisp-mode
+                          `((,clause-regexp (1 font-lock-keyword-face))))
+  (font-lock-add-keywords 'lisp-mode
+                          `((,keyword-regexp . font-lock-keyword-face))))
+
+;; Indent and fontify macros and functions I commonly use.
+
+(put 'case-fall-through 'common-lisp-indent-function '(as case))
+(put 'defsystem 'common-lisp-indent-function 1)
+(put 'define-flag 'common-lisp-indent-function 1)
+(put 'define-print-object 'common-lisp-indent-function 1)
+
+(let ((keywords '("case-fall-through")))
+  (font-lock-add-keywords 'lisp-mode
+                          `((,(concat "(" (regexp-opt keywords t) "\\>")
+                             (1 font-lock-keyword-face)))))
+
+(let ((optional-symbol "\\(\\(\\(\\sw\\|\\s_\\)+\\)?\\)"))
+  (cl-flet ((regexp (def) (concat "^\\s-*(" def "\\>\\s-*" optional-symbol)))
+    ;; Fontify defconst and define-flag as defvar.
+    (let ((def "\\(defconst\\|define-flag\\)"))
+      (font-lock-add-keywords 'lisp-mode
+                              `((,(regexp def)
+                                 (1 font-lock-keyword-face)
+                                 (2 font-lock-variable-name-face)))))
+    ;; Fontify com.gigamonkeys.foo.html:define-html-macro and
+    ;; hu.dwim.stefil:deftest as defun.
+    (let ((def "\\(define-html-macro\\|deftest\\)"))
+      (font-lock-add-keywords 'lisp-mode
+                              `((,(regexp def)
+                                 (1 font-lock-keyword-face)
+                                 (2 font-lock-function-name-face)))))))
+
+;; Allow Emacs mode settings that are commonly used in Lisp code.
+
+(cl-loop for (variable . type-predicate) in
+         '((Base . integerp) (base . integerp)
+           (Encoding . symbolp) (encoding . symbolp)
+           (Package . symbolp) (package . symbolp)
+           (Syntax . symbolp) (syntax . symbolp))
+         do (put variable 'safe-local-variable type-predicate))
+
+
+;;;     Slime interface to Common Lisp
+
+
+(defun client-root ()
+  (getenv "CLIENT_ROOT"))
+
+(let ((slime-root (local "software/source/slime")))
+  ;; When running Slime inside a google3 client, use Slime and SBCL from that
+  ;; client, if they exist.
+  (when (client-root)
+    (let ((client-slime (concat (client-root) "/google3/third_party/lisp/slime")))
+      (when (and (search (client-root) (expand-file-name default-directory))
+                 (file-exists-p (concat client-slime "/slime.el")))
+        (setf slime-root client-slime))))
+  (push slime-root load-path)
+  (push (concat slime-root "/contrib") load-path))
+
+(require 'slime-autoloads)
+
+(setq slime-contribs '(slime-asdf slime-banner slime-compiler-notes-tree slime-fancy slime-sprof))
+
+(setq slime-autodoc-use-multiline-p t
+      slime-default-lisp 'sbcl
+      slime-net-coding-system 'utf-8-unix
+      slime-repl-history-size 10000
+      slime-repl-history-trim-whitespaces t
+      slime-startup-animation nil
+      slime-truncate-lines nil)
+
+(setq slime-lisp-implementations
+      `((abcl ("abcl"))
+        (cmucl ("cmucl"))
+        (ccl ("ccl"))
+        (clisp ("clisp"))
+        (ecl ("ecl"))
+        (gcl ("gcl") :coding-system iso-latin-1-unix)
+        (sbcl ("sbcl"))
+        ,@(when (client-root)
+            `((leviathan-sbcl ,(concat (client-root)
+                                       "/google3/research/leviathan/scripts/sbcl"))))
+        (sbcl-with-swank ("sbcl" "--core" "/tmp/sbcl-with-swank.core")
+                         :init (lambda (port-file _)
+                                 (format "(swank:start-server %S)\n" port-file)))))
+
+;; Configure the slime-indentation contrib.
+(setq lisp-lambda-list-indentation t    ; this is the default
+      lisp-lambda-list-keyword-alignment t
+      lisp-lambda-list-keyword-parameter-alignment t)
+
+(setq common-lisp-hyperspec-root (concat "file:" (expand-file-name "~/doc/hyperspec-6/")))
+
+
+;;;     Bazel build system files.
+
+
+(push (local "software/source/bazel-mode") load-path)
+(autoload 'bazel-mode "bazel-mode" "Mode for Bazel BUILD files." t)
+(push '("/BUILD\\(\\..*\\)?\\'" . bazel-mode) auto-mode-alist)
+(push '("/WORKSPACE\\(\\..*\\)?\\'" . bazel-mode) auto-mode-alist)
+(push '("\\.\\(BUILD\\|WORKSPACE\\|bzl\\)\\'" . bazel-mode) auto-mode-alist)
+
+(add-hook 'bazel-mode-hook
+          (lambda ()
+            (add-hook 'before-save-hook #'bazel-format nil t)))
+
+
+;;;     Borg configuration files.
+
+
+(autoload 'borg-mode "borg-mode" "Mode for Borg configuration files" t)
+(push '("\\.borg\\'" . borg-mode) auto-mode-alist)
+(push '("\\.bcl\\'" . borg-mode) auto-mode-alist)
+
+(add-hook 'borg-mode-hook
+          (lambda ()
+            (define-key c-mode-map (kbd "DEL") 'delete-backward-char)))
+
+
+;;;;    Eclim
+
+
+(push (local "software/package/emacs-eclim") load-path)
+
+;; (add-hook 'java-mode-hook
+;;           (lambda ()
+;;             ;; Load Eclim and Eclimd.
+;;             (require 'eclimd)
+
+;;             (global-eclim-mode)       ; XXXX was 1 here
+
+;;             ;; Recommended setup:
+
+;;             ;; Initialize auto-complete.
+;;             ;; (require 'auto-complete-config)
+;;             ;; (ac-config-default)
+
+;;             ;; Initialize Eclim auto-complete integration.
+;;             ;; (require 'ac-emacs-eclim-source)
+;;             ;; (ac-emacs-eclim-config)
+
+;;             ;; What we do instead:
+
+;;             (setq ac-sources '(ac-source-emacs-eclim))
+;;             (auto-complete-mode t)
+
+
+;;             (require 'ac-emacs-eclim-source)
+;;             ; an alternative is (require 'eclim-completion)
+
+;;             ;; Turn on error message display in the echo area.
+;;             (setq help-at-pt-display-when-idle t)
+;;             (help-at-pt-set-timer)
+;;             ))
+
+
+;;;     Eglot mode
+
+
+;; (push (local "software/source/eglot") load-path)
+;; (autoload 'eglot "eglot" "Eglot language server protocol client" t nil)
+;; (autoload 'eglot-ensure
+;;   "eglot" "Start Eglot session for current buffer, if there isn't one." nil nil)
+
+(defvar eglot-server-programs
+  `((python-mode . ("pyls"))
+    ((c++-mode c-mode) . ("ccls"))
+    (go-mode . ("gopls"))
+    (java-mode . (,(local "software/source-trees/java-language-server/dist/lang_server_linux.sh")))
+    (java-mode . eclipse-jdt)
+    ))
+
+(defun eclipse-jdt (interactive)
+  (let* ((jdt-root (local "software/package/jdt-language-server-0.62.0/"))
+         (jar
+          (concat jdt-root "plugins/org.eclipse.equinox.launcher_1.5.800.v20200727-1323.jar"))
+         (config (concat jdt-root "config_linux"))
+         (project (or (project-current) `(transient . ,default-directory)))
+         (workspace
+          (expand-file-name (md5 (project-root project))
+                            (concat user-emacs-directory "eglot-eclipse-jdt-cache"))))
+    (cons 'eglot-eclipse-jdt
+          (list (executable-find "java")
+                "-Declipse.application=org.eclipse.jdt.ls.core.id1"
+                "-Dosgi.bundles.defaultStartLevel=4"
+                "-Declipse.product=org.eclipse.jdt.ls.core.product"
+                ;; "-Dlog.protocol=true"
+                ;; "-Dlog.level=NONE"
+                "-jar" jar
+                "-configuration" config
+                "-data" workspace))))
+
+
+;;;     Google Java Format
+
+
+(push (local "software/package/google-java-format") load-path)
+(autoload 'google-java-format-buffer "google-java-format"
+  "Format the current buffer with google-java-format." t)
+(autoload 'google-java-format-region "google-java-format"
+  "Format the current region with google-java-format." t)
+
+(setq google-java-format-executable (local "software/bin/google-java-format"))
+
+
+;;;     Jsonnet mode
+
+
+(push (local "software/source/jsonnet-mode") load-path)
+(autoload 'jsonnet-mode "jsonnet-mode" "Major mode for editing Jsonnet files" t)
+(push '("\\.jsonnet\\'" . jsonnet-mode) auto-mode-alist)
+(push '("\\.libsonnet\\'" . jsonnet-mode) auto-mode-alist)
+
+(add-hook 'jsonnet-mode-hook
+          (lambda ()
+            (setq show-trailing-whitespace t)
+            (subword-mode)))
+
+
+;;;     Magit
+
+
+(let* ((source (local "software/source/"))
+       (magit-root (concat source "magit/")))
+  (push (concat source "dash") load-path)
+  (push (concat source "ghub") load-path)
+  (push (concat source "magit-popup") load-path)
+  (push (concat source "with-editor") load-path)
+  (push (concat magit-root "lisp") load-path)
+  (push (concat magit-root "Documentation") Info-default-directory-list)
+  ;; (load "magit-autoloads")
+  )
+
+(define-key ctl-x-map (kbd "M-g") 'magit-dispatch-popup)
+(define-key ctl-x-map "g" 'magit-status)
+
+
+
+;;;     Markdown mode
+
+
+(push (local "software/source/markdown-mode") load-path)
+(autoload 'markdown-mode "markdown-mode" "Major mode for editing Markdown files" t)
+(push '("\\.markdown\\'" . markdown-mode) auto-mode-alist)
+(push '("\\.md\\'" . markdown-mode) auto-mode-alist)
+(autoload 'gfm-mode "markdown-mode" "Major mode for editing GitHub Flavored Markdown files" t)
+(push '("README\\.md\\'" . gfm-mode) auto-mode-alist)
+
+
+;;;     Paredit mode
+
+
+;; (push (local "software/package/paredit-20") load-path)
+
+;; (autoload 'paredit-mode "paredit" "Minor mode for editing S-expressions." t)
+;; ;(add-hook 'lisp-mode-hook (lambda () (paredit-mode 1)))
+
+;; (eval-after-load 'paredit
+;;   '(progn
+;;      (define-key paredit-mode-map (kbd ")") 'paredit-close-parenthesis)
+;;      (define-key paredit-mode-map (kbd "M-)") 'paredit-close-parenthesis-and-newline)))
+
+
+;;;     Perforce client
+
+
+;; (push (local "software/package/p4-10.6") load-path)
+
+;; (autoload 'p4-edit "p4" nil t)
+;; (autoload 'p4-revert "p4" nil t)
+
+;; (setq p4-do-find-file nil               ; do not query p4 on file open
+;;       p4-my-clients '(brown-ms1 brown-ms2 brown-ms3 brown-proto3)
+;;       p4-verbose nil)                   ; no pop-up buffer on p4-edit
+
+
+;;;     Printing
+
+
+;; Use ps-print-buffer-with-faces to generating color output.
+
+(let ((printer (getenv "PRINTER"))
+      (color-printer (getenv "COLOR_PRINTER")))
+  ;; There's no need to set ps-printer-name, when all printers understand
+  ;; PostScript.
+  (when printer (setq printer-name printer))
+  (unless color-printer (setq ps-print-color-p nil)))
+
+(setq ps-header-lines 1                 ; less information in the header
+      ps-lpr-switches '("-o sides=one-sided")
+      ;; The default is two in landscape mode and one in portrait mode.
+      ps-number-of-columns 1)
+
+
+;;;     Protocol buffer mode.
+
+
+(push (local "software/package/protobuf-mode") load-path)
+(autoload 'protobuf-mode "protobuf-mode" "Mode for protocol buffer files" t)
+(push '("\\.proto\\'" . protobuf-mode) auto-mode-alist)
+(push '("\\.protodevel\\'" . protobuf-mode) auto-mode-alist)
+
+
+;;;     Python mode
+
+
+(setq python-indent-guess-indent-offset nil
+      python-indent-offset (if (eq (host-location) 'home) 2 4))
+
+(make-variable-buffer-local 'python-indent-offset)
+
+(add-hook 'python-mode-hook
+          (lambda ()
+            (setq case-fold-search nil
+                  comment-column 40
+                  show-trailing-whitespace t)
+            (subword-mode)))
+
+
+;;;     Rust mode
+
+
+(push (local "software/source/rust-mode") load-path)
+(autoload 'rust-mode "rust-mode" "Mode for editing Rust files" t)
+(push '("\\.rs\\'" . rust-mode) auto-mode-alist)
+
+
+;;;     YAML mode
+
+
+(push (local "software/source/yaml-mode") load-path)
+(autoload 'yaml-mode "yaml-mode" "Mode for editing YAML files" t)
+(push '("\\.yaml\\'" . rust-mode) auto-mode-alist)
+(push '("\\.yml\\'" . rust-mode) auto-mode-alist)
+
+
+;;;     Go mode
+
+
+(push (local "software/source/go-mode") load-path)
+(autoload 'go-mode "go-mode" nil t)
+(push '("\\.go\\'" . go-mode) auto-mode-alist)
+
+(setq go-fontify-function-calls nil)
+
+(add-hook 'go-mode-hook
+          (lambda ()
+            (setq show-trailing-whitespace t
+                  tab-width 4)
+            (subword-mode)
+            (define-key go-mode-map "}" 'go-mode-insert-and-indent)
+            (define-key go-mode-map (kbd "DEL") 'backward-delete-char-untabify)
+            (add-hook 'before-save-hook #'gofmt nil t)
+            (eglot-ensure)
+            (company-mode)))
+
+
+;;;     C mode
+
+
+;; (push (local "software/package/java5-font-lock") load-path)
+;; (autoload 'java5-setup-fontification "java5-font-lock" nil t)
+;; (add-hook 'java-mode-hook 'java5-setup-fontification)
+
+(setq c-auto-newline nil
+      c-style-variables-are-local-p t)
+
+(c-add-style "brown"
+             '((c-basic-offset . 4)
+               (c-hanging-comment-ender-p . nil)
+               (c-offsets-alist . ((case-label . *)
+                                   (knr-argdecl-intro . 0)
+                                   (objc-method-args-cont . +)
+                                   (statement-block-intro . +)
+                                   (statement-case-intro . *)
+                                   (statement-case-open . *)
+                                   (statement-cont . c-lineup-math)
+                                   (substatement-open . 0)))
+               (comment-column . 40)
+               (require-final-newline . 'ask)))
+(c-add-style "brownjava"
+             '((c-basic-offset . 4)
+               (c-offsets-alist . ((case-label . *)
+                                   (class-open . 0)
+                                   (inexpr-class . 0)
+                                   (inline-open . 0)
+                                   (statement-case-intro . *)
+                                   (substatement-open . 0)))
+               (comment-column . 40)
+               (require-final-newline . 'ask)))
+(c-add-style "goldman"
+             '((c-basic-offset . 4)
+               (c-hanging-comment-ender-p . nil)
+               (c-offsets-alist . ((arglist-close . 0)
+                                   (case-label . +)
+                                   (inline-open . 0)
+                                   (member-init-intro . 0)
+                                   (statement-block-intro . +)
+                                   (statement-case-open . +)
+                                   (statement-cont . ++)
+                                   (substatement-open . 0)
+                                   (topmost-intro-cont . ++)))
+               (comment-column . 40)
+               (require-final-newline . 'ask)))
+(c-add-style "google"
+             `((c-basic-offset . 2)
+               (c-comment-only-line-offset . 0)
+               ;; Speed up indentation in XEmacs.
+               (c-enable-xemacs-performance-kludge-p . t)
+               (c-hanging-braces-alist . ((defun-open after)
+                                          (defun-close before after)
+                                          (class-open after)
+                                          (class-close before after)
+                                          (inexpr-class-open after)
+                                          (inexpr-class-close before)
+                                          (namespace-open after)
+                                          (inline-open after)
+                                          (inline-close before after)
+                                          (block-open after)
+                                          (block-close . c-snug-do-while)
+                                          (extern-lang-open after)
+                                          (extern-lang-close after)
+                                          (statement-case-open after)
+                                          (substatement-open after)))
+               (c-hanging-colons-alist . ((case-label)
+                                          (label after)
+                                          (access-label after)
+                                          (member-init-intro before)
+                                          (inher-intro)))
+               (c-hanging-semi&comma-criteria
+                . (c-semi&comma-no-newlines-for-oneline-inliners
+                   c-semi&comma-inside-parenlist
+                   c-semi&comma-no-newlines-before-nonblanks))
+               (c-indent-comment-alist . ((other . (space . 2))))
+               (c-indent-comments-syntactically-p . t)
+               (c-recognize-knr-p . nil)
+               (c-tab-always-indent . t)
+               (comment-column . 40)
+               (c-cleanup-list . (brace-else-brace
+                                  brace-elseif-brace
+                                  brace-catch-brace
+                                  empty-defun-braces
+                                  defun-close-semi
+                                  list-close-comma
+                                  scope-operator))
+               (c-offsets-alist . ((arglist-intro . ++) ; google-c-lineup-expression-plus-4
+                                   (func-decl-cont . ++)
+                                   (member-init-intro . ++)
+                                   (inher-intro . ++)
+                                   (comment-intro . 0)
+                                   (arglist-close . c-lineup-arglist)
+                                   (topmost-intro . 0)
+                                   (block-open . 0)
+                                   (inline-open . 0)
+                                   (substatement-open . 0)
+                                   (statement-cont
+                                    .
+                                    (,(when (fboundp 'c-no-indent-after-java-annotations)
+                                        'c-no-indent-after-java-annotations)
+                                     ,(when (fboundp 'c-lineup-assignments)
+                                        'c-lineup-assignments)
+                                     ++))
+                                   (label . /)
+                                   (case-label . +)
+                                   (statement-case-open . +)
+                                   (statement-case-intro . +) ; case w/o {
+                                   (access-label . /)
+                                   (innamespace . 0)
+                                   (inextern-lang . 0)))))
+(c-add-style "googlejava"
+             '("google"
+               (c-offsets-alist
+                (arglist-cont-nonempty java-lineup-conditional-expression-plus-4 ++)
+                (arglist-intro java-lineup-expression-plus-4))))
+
+(defun brown-c-style ()
+  (interactive)
+  (c-set-style "brown")
+  ;; Use C++ comment syntax, even when editing C code.
+  (setq comment-start "// "
+        comment-end   ""))
+
+(defun brown-java-style ()
+  (interactive)
+  (c-set-style "brownjava"))
+
+(defun eclipse-java-style ()
+  (interactive)
+  (c-set-style "googlejava")
+  ;; Lines are indented with tabs and tab stops are set every five columns.
+  (setq tab-width 5)
+  (setq indent-tabs-mode t))
+
+(defun goldman-c-style ()
+  (interactive)
+  (c-set-style "goldman")
+  ;; Use C++ comment syntax, even when editing C code.
+  (setq comment-start "// "
+        comment-end   "")
+  ;; Tab stops are set every 4 columns.
+  (setq tab-width 4))
+
+(defun google-c-style ()
+  (interactive)
+  (c-set-style "google"))
+
+(defun google-java-style ()
+  (interactive)
+  (autoload 'java-lineup-conditional-expression-plus-4 "google-java")
+  (autoload 'java-lineup-expression-plus-4 "google-java")
+  (c-set-style "googlejava"))
+
+(add-hook 'c-initialization-hook
+          (lambda ()
+            (define-key c-mode-base-map "\C-c " 'delete-horizontal-space)
+            ;; (define-key c-mode-base-map "\C-c." 'find-tag)
+            (define-key c-mode-base-map "\C-za" 'c-beginning-of-defun)
+            (define-key c-mode-base-map "\C-ze" 'c-end-of-defun)
+            (define-key c-mode-base-map (kbd "RET") 'electric-indent-just-newline)
+            (define-key c-mode-base-map "(" 'self-insert-command)
+            (define-key c-mode-base-map ")" 'self-insert-command)
+            (define-key c-mode-base-map "," 'self-insert-command)
+            (define-key c-mode-base-map "/" 'self-insert-command)
+            (define-key c-mode-base-map ";" 'self-insert-command)
+            (define-key c-mode-base-map (kbd "DEL") 'delete-backward-char)))
+(add-hook 'c-mode-common-hook
+          (lambda ()
+            (subword-mode)
+            ;; Turn on electric mode, so the key binding for '}' works.
+            (c-toggle-electric-state 1)
+            (setq case-fold-search nil
+                  show-trailing-whitespace t)))
+(add-hook 'c-mode-hook #'google-c-style)
+(add-hook 'objc-mode-hook #'brown-c-style)
+(add-hook 'c++-mode-hook
+          (lambda ()
+            (cl-ecase (host-location)
+              ((home) (brown-c-style))
+              ((work) (google-c-style)))))
+(add-hook 'java-mode-hook
+          (lambda ()
+            (cl-ecase (host-location)
+              ((home) (brown-java-style))
+              ((work) (if (string-match "google3/third_party/java_src/jgit" (buffer-file-name))
+                          (eclipse-java-style)
+                        (google-java-style))))
+            (eglot-ensure)
+            ))
+
+
+;;;     GUD debugger configuration
+
+
+(setq gud-chdir-before-run nil
+      gdb-create-source-file-list nil)
+
+(when (client-root)
+  (defun google-jdb ()
+    (interactive)
+    (let ((client (client-root)))
+      (jdb (concat gud-jdb-command-name
+                   " -attach 5005 -sourcepath"
+                   client "/google3/java:"
+                   client "/google3/javatests:"
+                   client "/google3/blaze-genfiles/java:"
+                   client "/google3/blaze-genfiles/javatests")))))
+
+
+;;;     Mail configuration
+
+
+;; Return address used both for email and Usenet newsgroup posts.
+
+(setq user-mail-address
+      (cl-ecase (host-location)
+        ((home) "robert.brown@gmail.com")
+        ((work) "brown@twosigma.com")))
+
+;; Configure sending.
+
+(setq mail-archive-file-name (expand-file-name "~/mail/out")
+      mail-from-style 'angles           ; gets my name into the From string
+      mail-signature nil                ; do not look for a .signature file
+      send-mail-function 'smtpmail-send-it)
+
+(cl-ecase (host-location)
+  ((home)
+   ;; smtpmail-auth-credentials (expand-file-name "~/.authinfo")
+   (setq smtpmail-smtp-server "smtp.gmail.com"
+         smtpmail-smtp-service 587
+         smtpmail-starttls-credentials '(("smtp.gmail.com" 587 nil nil))))
+  ((work)
+   (setq smtpmail-smtp-server "msx.twosigma.com"
+         smtpmail-sendto-domain "twosigma.com"
+         ;; TLS communication does not appear to work.
+         ;; smtpmail-smtp-service 587
+         ;; smtpmail-stream-type 'ssl
+         )))
+
+      ;; smtpmail-smtp-server "smtp.gmail.com"
+      ;; smtpmail-smtp-service 465
+      ;; smtpmail-stream-type 'ssl)
+
+;; (cl-ecase (host-location)
+;;   ((home)
+;;    ;; smtpmail-auth-credentials (expand-file-name "~/.authinfo")
+;;    (setq smtpmail-default-smtp-server "smtp.gmail.com"
+;;          smtpmail-smtp-service 587
+;;          smtpmail-starttls-credentials '(("smtp.gmail.com" 587 nil nil))))
+;;   ((work)
+;;    (setq smtpmail-auth-credentials '(("smtp.corp.google.com" 25 "brown" foo))
+;;          smtpmail-default-smtp-server "smtp.corp.google.com"
+;;          smtpmail-local-domain "google.com"
+;;          smtpmail-sendto-domain "google.com")))
+
+(add-hook 'mail-mode-hook
+          (lambda ()
+            (require 'auth-source)
+            (setq fill-column 70)))
+
+(add-hook 'mail-setup-hook
+          ;; Unconditionally create CC and BCC fields when composing a mail
+          ;; message.
+          (lambda ()
+            (mail-abbrevs-setup)
+            (or (mail-position-on-field "cc" t)
+                (progn (mail-position-on-field "subject")
+                       (insert "\nCC: ")))
+            (or (mail-position-on-field "bcc" t)
+                (progn (mail-position-on-field "cc")
+                       (insert "\nBCC: ")))
+            (mail-position-on-field "to" t)))
+
+
+;;;     Uniquify
+
+
+(require 'uniquify)
+(setq uniquify-buffer-name-style 'post-forward-angle-brackets
+      uniquify-strip-common-suffix t)
+
+
+;;;     VM mail reader
+
+
+(let ((vm-root (local "software/package/vm-8.2.0b/")))
+  (push (concat vm-root "lisp") load-path)
+  (push (concat vm-root "info") Info-default-directory-list))
+
+(require 'vm-autoloads)
+
+(setq vm-auto-center-summary t
+      vm-auto-get-new-mail nil          ; do not automatically fetch mail
+      vm-display-using-mime t
+;      vm-flush-interval nil             ; do not flush attributes to buffers
+      vm-flush-interval t
+      vm-highlighted-header-regexp "^From\\|^Subject"
+      vm-honor-mime-content-disposition t
+      vm-mail-check-interval nil        ; do not asynchronously check for mail
+      vm-mime-alternative-select-method '(favorite-internal "text/plain")
+      vm-mime-default-face-charsets t   ; utf-8 window can display any charset
+      ;; Prevent Lynx from being auto selected for formatting replies.
+      vm-mime-text/html-handler nil
+      vm-move-after-deleting t
+      vm-move-after-undeleting t
+      vm-netscape-program "mozilla"
+      vm-preview-lines nil              ; display entire message
+      vm-preview-read-messages t
+      vm-primary-inbox (expand-file-name "~/mail/vm-inbox")
+      vm-reply-ignored-addresses (list (concat "^" user-mail-address))
+      vm-reply-subject-prefix "Re: "
+      vm-stunnel-program "stunnel4"
+      vm-use-toolbar nil)
+
+;; Use Lynx for formatting HTML messages, when there's no text/plain version.
+(push '("text/html" "text/plain" "/usr/bin/lynx -force_html -dump -stdin")
+      vm-mime-type-converter-alist)
+
+;; Fetch mail from GMail's IMAP server.
+
+(setq vm-imap-expunge-after-retrieving t)
+(add-hook 'vm-mode-hook
+          (lambda ()
+            (require 'auth-source)
+            (let* ((password (auth-source-user-or-password "password" "imap.gmail.com" 993))
+                   (mailbox (format "imap-ssl:imap.gmail.com:993:INBOX:login:%s:%s"
+                                    user-mail-address password)))
+              (setq vm-imap-server-list (list mailbox))
+              (setq vm-spool-files `(("~/mail/vm-inbox" ,mailbox "~/mail/vm-inbox.crash"))))))
+
+;; ;; Fetch mail from GMail's POP server.
+
+;; (setq vm-pop-expunge-after-retrieving nil)
+;; (setq vm-spool-files
+;;       `(("~/mail/vm-inbox"
+;;          ,(format "pop-ssl:pop.gmail.com:995:pass:%s:*" user-mail-address)
+;;          "~/mail/vm-inbox.crash")))
+
+;; Auto save when the summary buffer is inactive, instead of after a certain
+;; number of keystrokes.
+
+(add-hook 'vm-summary-mode-hook
+          (lambda ()
+            (make-variable-buffer-local 'auto-save-interval)
+            (setq auto-save-interval 0)
+            (make-variable-buffer-local 'auto-save-timeout)
+            (setq auto-save-timeout 120)))
+
+
+;;;     Configure MailCrypt to work with the VM email reader
+
+
+;; (add-hook 'vm-mail-mode-hook 'mc-install-write-mode)
+;; (add-hook 'vm-mode-hook 'mc-install-read-mode)
+;; (add-hook 'vm-presentation-mode-hook 'mc-install-read-mode)
+;; (add-hook 'vm-summary-mode-hook 'mc-install-read-mode)
+;; (add-hook 'vm-virtual-mode-hook 'mc-install-read-mode)
+
+
+;;;     WWW web browser
+
+
+(defun init-url-proxies ()
+  (interactive)
+  (require 'url)
+  (url-do-setup)
+  (dolist (scheme '("all" "ftp" "http" "https"))
+    (url-scheme-register-proxy scheme)))
+
+;; (setq load-path (cons (expand-file-name "~/lib/emacs/lisp/w3/lisp")
+;;                       load-path))
+
+;; (autoload 'w3 "w3" "WWW Browser" t)
+;; (setq w3-default-homepage "http://www.ja.gs.com")
+
+
+;;;     Mode hooks.
+
+
+(add-hook 'ace-mode-hook
+          (lambda ()
+            (define-key ace-mode-map "\C-m" 'newline)
+            (define-key ace-mode-map (kbd "DEL") 'delete-backward-char)
+            (setq comment-column 40)))
+
+(add-hook 'eiffel-mode-hook
+          (lambda ()
+            (define-key eiffel-mode-map "\C-m" 'newline)
+            (define-key eiffel-mode-map (kbd "DEL") 'delete-backward-char)
+            (define-key eiffel-mode-map "\C-za" 'eif-beginning-of-feature)
+            (setq comment-column 40)))
+
+(add-hook 'emacs-lisp-mode-hook
+          (lambda ()
+            (define-key emacs-lisp-mode-map (kbd "DEL") 'delete-backward-char)
+            (setq comment-start "; "
+                  show-trailing-whitespace t)))
+
+(add-hook 'fx-mode-hook
+          (lambda ()
+            (define-key fx-mode-map (kbd "DEL") 'delete-backward-char)))
+
+(add-hook 'inferior-scheme-mode-hook
+          (lambda ()
+            (define-key inferior-scheme-mode-map "\C-d" 'delete-char)
+            (define-key inferior-scheme-mode-map "\C-c\C-d" 'undefined)))
+
+(add-hook 'makefile-mode-hook
+          (lambda ()
+            (setq comment-start "# "
+                  show-trailing-whitespace t)))
+
+(add-hook 'nroff-mode-hook
+          (lambda ()
+            (electric-nroff-mode 1))) ; turn on electric-nroff-newline
+
+(add-hook 'scheme-mode-hook
+          (lambda ()
+            (setq comment-start "; ")
+            (setq show-trailing-whitespace t)
+            (define-key scheme-mode-map "\M-\C-m" 'scheme-send-definition)
+            (define-key scheme-mode-map (kbd "DEL") 'delete-backward-char)
+            ;; New syntax.
+            ;; (put 'define-syntax 'scheme-indent-function 1)
+            ;; (put 'let-syntax 'scheme-indent-function 1)
+            ;; (put 'letrec-syntax 'scheme-indent-function 1)
+            ;; (put 'syntax-rules 'scheme-indent-function 1)
+            ;; Scheme48
+            (put 'receive 'scheme-indent-function 2)
+            (put 'with-handler 'scheme-indent-hook 1)
+            (put 'let-optionals 'scheme-indent-function 2)
+            (put 'let-optionals* 'scheme-indent-function 2)
+            ;; Scheme shell
+            (put 'with-current-input-port 'scheme-indent-function 1)
+            (put 'with-errno-handler 'scheme-indent-function 1)
+            ;; Tiny CLOS
+            (put 'make-method 'scheme-indent-function 1)
+            (put 'add-method 'scheme-indent-function 1)))
+
+(add-hook 'text-mode-hook
+          (lambda ()
+;;          (define-key text-mode-map "\t" 'tab-to-tab-stop)
+            (auto-fill-mode 1)          ; turn on auto fill
+            (setq tab-width 4)))
+
+
+;;;     Shell script mode
+
+
+(setq sh-heredoc-face 'font-lock-string-face ; string face for here documents
+      sh-indent-comment t)                   ; indent comments to code offset
+
+(add-hook 'sh-mode-hook
+          (lambda ()
+            (define-key sh-mode-map (kbd "DEL") 'delete-backward-char)
+            (setq comment-column 40
+                  show-trailing-whitespace t)))
+
+
+;;;     SGML mode
+
+
+(add-hook 'sgml-mode-hook
+          (lambda ()
+            (auto-fill-mode 0)        ; turn off auto fill
+            (setq show-trailing-whitespace t)))
+
+
+;;;     Map filename extensions to editing modes.
+
+;; (setq auto-mode-alist
+;;       (append '(("/Ace\\'" . ace-mode)     ; Eiffel Lace files
+;;                 ("\\.e\\'" . eiffel-mode)  ; Eiffel source files
+;;                 ("\\.fx\\'" . fx-mode)     ; FX source code
+;;                 ("\\.sml\\'" . sml-mode)   ; Standard ML source
+;;                 ("\\.swig\\'" . c++-mode)) ; SWIG source code
+;;               auto-mode-alist))
+
+
+;;;     Window system configuration
+
+(when window-system
+  (define-key ctl-x-map "\C-z" 'undefined) ; disable suspend-emacs
+  (mouse-wheel-mode)
+  (setq mouse-wheel-follow-mouse t))
+
+
+(when (eq (host-location) 'work)
+  ;; Edit C files and all headers using C++ mode.
+  (setq auto-mode-alist
+        (append '(("\\.[ch]\\'" . c++-mode)) auto-mode-alist)))
+
+
+;;;     JDE Java development environment
+
+
+;; (dolist (path '((local "software/package/elib-1.0/share/emacs/site-lisp/elib")
+;;                 (local "software/source/cedet/common")
+;;                 (local "software/package/jde-2.3.5.1/lisp")))
+;;   (push path load-path))
+
+;; (load-library "cedet")
+
+;; (setq semanticdb-default-save-directory (expand-file-name "~/.semanticdb"))
+
+;; (autoload 'jde-mode "jde" "JDE mode" t)
+;; (push '("\\.java\\'" . jde-mode) auto-mode-alist)
+
+;; (setq jde-jdk '("1.5.0"))
+;; (setq jde-jdk-registry '(("1.5.0" . "/usr/local/buildtools/java/jdk1.5.0_06")))
+
+
+;; ;;;;    Package manager
+
+(setq package-archives '(("gnu" . "http://elpa.gnu.org/packages/")
+                         ("melpa" . "http://melpa.org/packages/")
+                         ))
+
+(custom-set-variables '(package-selected-packages '(company eglot)))
