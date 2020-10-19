@@ -94,9 +94,9 @@
   ;; Configure Internet proxies.  At Two Sigma a local proxy can be started
   ;; with "gssproxy2 --exec emacs".
   (setq url-proxy-services
-        '(("ftp" . "localhost:20000")
-          ("http" . "localhost:20000")
-          ("https" . "localhost:20000")
+        '(("ftp" . "localhost:20001")
+          ("http" . "localhost:20001")
+          ("https" . "localhost:20001")
           ("no_proxy" . "^.*twosigma\.com"))))
 
 
@@ -489,7 +489,7 @@ SIZE indicates how the window is split."
 ;;;     GNUS newsgroup and email reader
 
 
-(setq canlock-password "ade6263f3ca261b15dc04d2108e9b2c0f52a8f24" ; XXXX: What is this?
+(setq canlock-password "ade6263f3ca261b15dc04d2108e9b2c0f52a8f24" ; cancel article password
       gnus-article-save-directory (expand-file-name "~/News")
       gnus-asynchronous t               ; fetch articles in the background
       gnus-check-new-news t
@@ -598,7 +598,7 @@ SIZE indicates how the window is split."
             (cons (list server channel) erc-autojoin-channels-alist)))))
 
 (cl-defmacro define-chat (function server channel
-                                  &key (nick "brown") password tls (port (if tls 6697 6667)))
+                                   &key (nick "brown") password tls (port (if tls 6697 6667)))
   "Define an IRC chat command."
   `(defun ,function ()
      (interactive)
@@ -622,6 +622,7 @@ SIZE indicates how the window is split."
 (define-freenode-chat gallium-chat "#galliumos")
 (define-freenode-chat go-chat "#go-nuts")
 (define-freenode-chat grpc-chat "#grpc")
+(define-freenode-chat kubernetes-chat "#kubernetes")
 (define-freenode-chat lisp-chat "#lisp")
 (define-freenode-chat nyc-mesh-chat "#nycmeshnet")
 (define-freenode-chat python-chat "#python")
@@ -845,6 +846,9 @@ SIZE indicates how the window is split."
 
 (add-hook 'bazel-mode-hook
           (lambda ()
+            ;; Fontify ts_codebase as a Bazel built in.
+            (push `(,(rx symbol-start "ts_codebase" symbol-end) . font-lock-builtin-face)
+                  bazel-font-lock-keywords)
             (add-hook 'before-save-hook #'bazel-format nil t)))
 
 
@@ -860,43 +864,6 @@ SIZE indicates how the window is split."
             (define-key c-mode-map (kbd "DEL") 'delete-backward-char)))
 
 
-;;;;    Eclim
-
-
-(push (local "software/package/emacs-eclim") load-path)
-
-;; (add-hook 'java-mode-hook
-;;           (lambda ()
-;;             ;; Load Eclim and Eclimd.
-;;             (require 'eclimd)
-
-;;             (global-eclim-mode)       ; XXXX was 1 here
-
-;;             ;; Recommended setup:
-
-;;             ;; Initialize auto-complete.
-;;             ;; (require 'auto-complete-config)
-;;             ;; (ac-config-default)
-
-;;             ;; Initialize Eclim auto-complete integration.
-;;             ;; (require 'ac-emacs-eclim-source)
-;;             ;; (ac-emacs-eclim-config)
-
-;;             ;; What we do instead:
-
-;;             (setq ac-sources '(ac-source-emacs-eclim))
-;;             (auto-complete-mode t)
-
-
-;;             (require 'ac-emacs-eclim-source)
-;;             ; an alternative is (require 'eclim-completion)
-
-;;             ;; Turn on error message display in the echo area.
-;;             (setq help-at-pt-display-when-idle t)
-;;             (help-at-pt-set-timer)
-;;             ))
-
-
 ;;;     Eglot mode
 
 
@@ -905,33 +872,46 @@ SIZE indicates how the window is split."
 ;; (autoload 'eglot-ensure
 ;;   "eglot" "Start Eglot session for current buffer, if there isn't one." nil nil)
 
-(defvar eglot-server-programs
-  `((python-mode . ("pyls"))
-    ((c++-mode c-mode) . ("ccls"))
-    (go-mode . ("gopls"))
-    (java-mode . (,(local "software/source-trees/java-language-server/dist/lang_server_linux.sh")))
-    (java-mode . eclipse-jdt)
-    ))
+(with-eval-after-load 'eglot
+  (lambda ()
+    (push '(java-mode . ("java-language-server")) eglot-server-programs)))
 
-(defun eclipse-jdt (interactive)
-  (let* ((jdt-root (local "software/package/jdt-language-server-0.62.0/"))
-         (jar
-          (concat jdt-root "plugins/org.eclipse.equinox.launcher_1.5.800.v20200727-1323.jar"))
-         (config (concat jdt-root "config_linux"))
-         (project (or (project-current) `(transient . ,default-directory)))
-         (workspace
-          (expand-file-name (md5 (project-root project))
-                            (concat user-emacs-directory "eglot-eclipse-jdt-cache"))))
-    (cons 'eglot-eclipse-jdt
-          (list (executable-find "java")
-                "-Declipse.application=org.eclipse.jdt.ls.core.id1"
-                "-Dosgi.bundles.defaultStartLevel=4"
-                "-Declipse.product=org.eclipse.jdt.ls.core.product"
-                ;; "-Dlog.protocol=true"
-                ;; "-Dlog.level=NONE"
-                "-jar" jar
-                "-configuration" config
-                "-data" workspace))))
+(defvar *eglot-on* nil)
+
+(defun eglot-on ()
+  (interactive)
+  (load-library "markdown-mode")
+  (eglot-ensure)
+  (company-mode)
+  (setq *eglot-on* t))
+
+;; For java-language-server create a .dir-locals.el file containing something like:
+;; ((java-mode
+;;   (eglot-workspace-configuration
+;;    (:java
+;;     (:classPath "foo.jar" "bar.jar")))))
+
+(put 'eglot-workspace-configuration 'safe-local-variable (lambda (value) t))
+
+;; (defun eclipse-jdt (interactive)
+;;   (let* ((jdt-root (local "software/package/jdt-language-server-0.62.0/"))
+;;          (jar
+;;           (concat jdt-root "plugins/org.eclipse.equinox.launcher_1.5.800.v20200727-1323.jar"))
+;;          (config (concat jdt-root "config_linux"))
+;;          (project (or (project-current) `(transient . ,default-directory)))
+;;          (workspace
+;;           (expand-file-name (md5 (project-root project))
+;;                             (concat user-emacs-directory "eglot-eclipse-jdt-cache"))))
+;;     (cons 'eglot-eclipse-jdt
+;;           (list (executable-find "java")
+;;                 "-Declipse.application=org.eclipse.jdt.ls.core.id1"
+;;                 "-Dosgi.bundles.defaultStartLevel=4"
+;;                 "-Declipse.product=org.eclipse.jdt.ls.core.product"
+;;                 ;; "-Dlog.protocol=true"
+;;                 ;; "-Dlog.level=NONE"
+;;                 "-jar" jar
+;;                 "-configuration" config
+;;                 "-data" workspace))))
 
 
 ;;;     Google Java Format
@@ -984,8 +964,7 @@ SIZE indicates how the window is split."
 
 (push (local "software/source/markdown-mode") load-path)
 (autoload 'markdown-mode "markdown-mode" "Major mode for editing Markdown files" t)
-(push '("\\.markdown\\'" . markdown-mode) auto-mode-alist)
-(push '("\\.md\\'" . markdown-mode) auto-mode-alist)
+(push '("\\.\\(?:md\\|markdown\\|mkd\\|mdown\\|mkdn\\|mdwn\\)\\'" . markdown-mode) auto-mode-alist)
 (autoload 'gfm-mode "markdown-mode" "Major mode for editing GitHub Flavored Markdown files" t)
 (push '("README\\.md\\'" . gfm-mode) auto-mode-alist)
 
@@ -1073,8 +1052,8 @@ SIZE indicates how the window is split."
 
 (push (local "software/source/yaml-mode") load-path)
 (autoload 'yaml-mode "yaml-mode" "Mode for editing YAML files" t)
-(push '("\\.yaml\\'" . rust-mode) auto-mode-alist)
-(push '("\\.yml\\'" . rust-mode) auto-mode-alist)
+(push '("\\.yaml\\'" . yaml-mode) auto-mode-alist)
+(push '("\\.yml\\'" . yaml-mode) auto-mode-alist)
 
 
 ;;;     Go mode
@@ -1094,8 +1073,9 @@ SIZE indicates how the window is split."
             (define-key go-mode-map "}" 'go-mode-insert-and-indent)
             (define-key go-mode-map (kbd "DEL") 'backward-delete-char-untabify)
             (add-hook 'before-save-hook #'gofmt nil t)
-            (eglot-ensure)
-            (company-mode)))
+            (when *eglot-on*
+              (eglot-ensure)
+              (company-mode))))
 
 
 ;;;     C mode
@@ -1215,6 +1195,10 @@ SIZE indicates how the window is split."
                (c-offsets-alist
                 (arglist-cont-nonempty java-lineup-conditional-expression-plus-4 ++)
                 (arglist-intro java-lineup-expression-plus-4))))
+(c-add-style "two-sigma"
+             '("google"
+               (c-basic-offset . 4)
+               (c-indent-comment-alist . ((other . (space . 1))))))
 
 (defun brown-c-style ()
   (interactive)
@@ -1287,8 +1271,9 @@ SIZE indicates how the window is split."
               ((work) (if (string-match "google3/third_party/java_src/jgit" (buffer-file-name))
                           (eclipse-java-style)
                         (google-java-style))))
-            (eglot-ensure)
-            ))
+            (when *eglot-on*
+              (eglot-ensure)
+              (company-mode))))
 
 
 ;;;     GUD debugger configuration
@@ -1542,7 +1527,7 @@ SIZE indicates how the window is split."
 
 (add-hook 'text-mode-hook
           (lambda ()
-;;          (define-key text-mode-map "\t" 'tab-to-tab-stop)
+            ;; (define-key text-mode-map "\t" 'tab-to-tab-stop)
             (auto-fill-mode 1)          ; turn on auto fill
             (setq tab-width 4)))
 
@@ -1565,7 +1550,7 @@ SIZE indicates how the window is split."
 
 (add-hook 'sgml-mode-hook
           (lambda ()
-            (auto-fill-mode 0)        ; turn off auto fill
+            (auto-fill-mode 0)          ; turn off auto fill
             (setq show-trailing-whitespace t)))
 
 
@@ -1616,7 +1601,8 @@ SIZE indicates how the window is split."
 ;; ;;;;    Package manager
 
 (setq package-archives '(("gnu" . "http://elpa.gnu.org/packages/")
-                         ("melpa" . "http://melpa.org/packages/")
+                         ;; ("melpa" . "http://melpa.org/packages/")
                          ))
 
-(custom-set-variables '(package-selected-packages '(company eglot)))
+(custom-set-variables
+ '(package-selected-packages '(company eglot)))
