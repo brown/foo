@@ -873,8 +873,22 @@ SIZE indicates how the window is split."
 ;;   "eglot" "Start Eglot session for current buffer, if there isn't one." nil nil)
 
 (with-eval-after-load 'eglot
-  (lambda ()
-    (push '(java-mode . ("java-language-server")) eglot-server-programs)))
+  (push '(java-mode . ("java-language-server")) eglot-server-programs))
+
+;; For java-language-server and pyls create a .dir-locals.el file containing something like:
+
+;; ((java-mode
+;;   (eglot-workspace-configuration
+;;    (:java
+;;     (:classPath . ("/path/to/foo.jar" "/path/to/bar.jar")))))
+;;  (python-mode
+;;   (eglot-workspace-configuration
+;;    (:pyls
+;;     (:plugins
+;;      (:jedi
+;;       (:environment . "/path/to/python-binary")))))))
+
+(put 'eglot-workspace-configuration 'safe-local-variable (lambda (value) t))
 
 (defvar *eglot-on* nil)
 
@@ -884,14 +898,6 @@ SIZE indicates how the window is split."
   (eglot-ensure)
   (company-mode)
   (setq *eglot-on* t))
-
-;; For java-language-server create a .dir-locals.el file containing something like:
-;; ((java-mode
-;;   (eglot-workspace-configuration
-;;    (:java
-;;     (:classPath "foo.jar" "bar.jar")))))
-
-(put 'eglot-workspace-configuration 'safe-local-variable (lambda (value) t))
 
 ;; (defun eclipse-jdt (interactive)
 ;;   (let* ((jdt-root (local "software/package/jdt-language-server-0.62.0/"))
@@ -1028,15 +1034,20 @@ SIZE indicates how the window is split."
 
 (setq python-indent-guess-indent-offset nil
       python-indent-offset (if (eq (host-location) 'home) 2 4))
-
 (make-variable-buffer-local 'python-indent-offset)
+
+(when (eq (host-location) 'work)
+  (setq python-flymake-command '("ts_flake8" "-")))
 
 (add-hook 'python-mode-hook
           (lambda ()
             (setq case-fold-search nil
                   comment-column 40
                   show-trailing-whitespace t)
-            (subword-mode)))
+            (subword-mode)
+            (when *eglot-on*
+              (eglot-ensure)
+              (company-mode))))
 
 
 ;;;     Rust mode
@@ -1302,7 +1313,7 @@ SIZE indicates how the window is split."
 (setq user-mail-address
       (cl-ecase (host-location)
         ((home) "robert.brown@gmail.com")
-        ((work) "brown@twosigma.com")))
+        ((work) "robert.brown@twosigma.com")))
 
 ;; Configure sending.
 
@@ -1500,7 +1511,7 @@ SIZE indicates how the window is split."
 
 (add-hook 'nroff-mode-hook
           (lambda ()
-            (electric-nroff-mode 1))) ; turn on electric-nroff-newline
+            (electric-nroff-mode 1)))   ; turn on electric-nroff-newline
 
 (add-hook 'scheme-mode-hook
           (lambda ()
@@ -1579,26 +1590,8 @@ SIZE indicates how the window is split."
         (append '(("\\.[ch]\\'" . c++-mode)) auto-mode-alist)))
 
 
-;;;     JDE Java development environment
+;;;;    Package manager
 
-
-;; (dolist (path '((local "software/package/elib-1.0/share/emacs/site-lisp/elib")
-;;                 (local "software/source/cedet/common")
-;;                 (local "software/package/jde-2.3.5.1/lisp")))
-;;   (push path load-path))
-
-;; (load-library "cedet")
-
-;; (setq semanticdb-default-save-directory (expand-file-name "~/.semanticdb"))
-
-;; (autoload 'jde-mode "jde" "JDE mode" t)
-;; (push '("\\.java\\'" . jde-mode) auto-mode-alist)
-
-;; (setq jde-jdk '("1.5.0"))
-;; (setq jde-jdk-registry '(("1.5.0" . "/usr/local/buildtools/java/jdk1.5.0_06")))
-
-
-;; ;;;;    Package manager
 
 (setq package-archives '(("gnu" . "http://elpa.gnu.org/packages/")
                          ;; ("melpa" . "http://melpa.org/packages/")
