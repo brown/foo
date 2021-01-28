@@ -14,9 +14,9 @@
 
 (setq inhibit-startup-echo-area-message "brown") ; must be a separate form
 (setq inhibit-default-init t
+      initial-scratch-message nil
       inhibit-startup-buffer-menu t
-      inhibit-startup-screen t
-      initial-scratch-message nil)
+      inhibit-startup-screen t)
 
 
 ;;;     Global settings
@@ -27,7 +27,7 @@
 
 (defun host-location ()
   "Return HOME or WORK, an indication of where Emacs is running."
-  (if (member (system-name) '("chuwi" "raspberry-pi" "ugg"))
+  (if (member (system-name) '("chuwi" "larkbox" "raspberry-pi" "ugg"))
       'home
     'work))
 
@@ -65,7 +65,7 @@
       emacs-lisp-docstring-fill-column 79
       ;; XXXX: This setting causes display problems, such as garbage during a
       ;; long running tags-search.
-      ;; garbage-collection-messages t  ; display messages when collecting
+      garbage-collection-messages t     ; display messages when collecting
       gc-cons-threshold (meg 5)         ; do not garbage collect too often
       isearch-lax-whitespace nil        ; space does not match any whitespace
       large-file-warning-threshold (meg 100)
@@ -82,7 +82,7 @@
       scroll-conservatively 10          ; smooth scroll most of the time
       set-mark-command-repeat-pop t     ; C-u C-SPC ... rotates through marks
       truncate-partial-width-windows nil; no truncation when vertically split
-      vc-handled-backends '()           ; disable VC mode
+      ;; vc-handled-backends '()           ; disable VC mode
       visible-cursor nil                ; use normal cursor, not blinking one
       xterm-extra-capabilities nil)     ; do not query xterm for features
 
@@ -188,10 +188,6 @@
              (show-paren-mismatch . ,+background-red-face+)))
 
 (custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
  '(header-line ((t (:inherit nil :inverse-video nil :underline t)))))
 
 ;; Dired settings
@@ -626,6 +622,7 @@ SIZE indicates how the window is split."
 (define-freenode-chat lisp-chat "#lisp")
 (define-freenode-chat nyc-mesh-chat "#nycmeshnet")
 (define-freenode-chat python-chat "#python")
+(define-freenode-chat sicl-chat "#sicl")
 (define-freenode-chat sbcl-chat "#sbcl")
 (define-freenode-chat symbolics-chat "#smbx")
 (define-freenode-chat ubuntu-arm-chat "#ubuntu-arm")
@@ -943,7 +940,10 @@ SIZE indicates how the window is split."
 (add-hook 'jsonnet-mode-hook
           (lambda ()
             (setq show-trailing-whitespace t)
-            (subword-mode)))
+            (subword-mode)
+            ;; When formatting the current buffer, do not ask to save it.
+            (make-variable-buffer-local 'compilation-ask-about-save)
+            (setq compilation-ask-about-save nil)))
 
 
 ;;;     Magit
